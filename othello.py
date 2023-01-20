@@ -64,6 +64,17 @@ class OthelloState(BaseState):
     Boolean value indicating wheter the game is done.
     """
 
+    reward: NDArray[np.int_]
+    """
+    Array of shape ''(2,)'',
+    where each value indicates the reward of each agent.
+
+    values
+        - Win : 1
+        - Lose : -1
+        - Draw or not done yet : 0 
+    """
+
     def __str__(self) -> str:
         """
         Generate a human-readable string representation of the board.
@@ -200,16 +211,19 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
             raise ValueError(f"out of board: {(r, c)}")
         if not 0 <= agent_id <= 1:
             raise ValueError(f"invalid agent_id: {agent_id}")
-        if state.board[1-agent_id][r][c]:
-            raise ValueError("cannot put a stone on opponent's stone")
-        if state.board[agent_id][r][c]:
-            raise ValueError("cannot put a stone on another stone")     
+        
+        if state.legal_actions[agent_id][r][c] == 0:
+            if state.board[1-agent_id][r][c]:
+                raise ValueError("cannot put a stone on opponent's stone")
+            elif state.board[agent_id][r][c]:
+                raise ValueError("cannot put a stone on another stone")
+            else:
+                raise ValueError("There is no stones to flip")
 
         board = np.copy(state.board)
 
         directions = [(1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1)]
 
-        flipped = False
         for dir in directions:
             stones_to_flip = []
             temp_r = r
@@ -217,11 +231,12 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
             for _ in range(1, self.board_size):
                 temp_r += dir[0]
                 temp_c += dir[1]
+                if not self._check_in_range(np.array([temp_r, temp_c])):
+                    break
                 if state.board[1-agent_id][temp_r][temp_c] == 1:
                     stones_to_flip.append((temp_r, temp_c))
                 elif state.board[agent_id][temp_r][temp_c] == 1:
                     if stones_to_flip:
-                        flipped = True
                         for a_stone in stones_to_flip:
                             board[1-agent_id][a_stone[0]][a_stone[1]] = 0
                             board[agent_id][a_stone[0]][a_stone[1]] = 1
@@ -229,21 +244,131 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
                 else:
                     break
 
-        if not flipped:
-            raise ValueError("There is no stones to flip")
+        legal_actions = np.zeros((2, self.board_size, self.board_size), dtype=np.int_)
         
-        # 여기서부터 이제 legal_actions에 대한 코드 짜야함
-        # 사실 위에서 판단하는 것들 모두 여기서 미리 처리하고
-        # 위에서는 입력된 r, c가 전 state의 legal_actions에 포함되어 있는지만 확인하면 됨
+        for r in range(self.board_size):
+            for c in range(self.board_size):
 
+                if state.board[0][r][c] == 0 and state.board[1][r][c] == 0:
+
+                    for agent_id in range(2):
+
+                        flipped = False
+                        for dir in directions:
+
+                            something_to_flip = False
+                            temp_r = r
+                            temp_c = c
+                            for _ in range(1, self.board_size):
+
+                                temp_r += dir[0]
+                                temp_c += dir[1]
+                                if not self._check_in_range(np.array([temp_r, temp_c])):
+                                    break
+                                if state.board[1-agent_id][temp_r][temp_c] == 1:
+                                    something_to_flip = True
+                                elif state.board[agent_id][temp_r][temp_c] == 1:
+                                    if something_to_flip:
+                                        flipped = True
+                                    break
+                                else:
+                                    break
+                            if flipped:
+                                break
+                        
+                        if flipped:
+                            legal_actions[agent_id][r][c] = 1
         
+        done = False
+        reward = np.zeros((2,))
+        if sum(legal_actions == 1) == 0:
+            done = True
+            reward = self._check_wins(board)
+        
+        next_state = OthelloState(
+            board = board,
+            legal_actions = legal_actions,
+            done = done,
+            reward = reward
+        )
+        if post_step_fn is not None:
+            post_step_fn(next_state, agent_id, action)
+        return next_state
 
+    def _check_wins(self, board: NDArray[np.int_]) -> NDArray[np.int_]:
+        agent0_cnt = sum(board[0] == 1)
+        agent1_cnt = sum(board[1] == 1)
+        
+        if agent0_cnt > agent1_cnt: return np.array([1, -1])
+        elif agent0_cnt < agent1_cnt: return np.array([-1, 1])
+        else: return np.array([0, 0])
 
     def _check_in_range(self, pos: NDArray[np.int_], bottom_right=None) -> np.bool_:
         if bottom_right is None:
             bottom_right = np.array([self.board_size, self.board_size])
         return np.all(np.logical_and(np.array([0, 0]) <= pos, pos < bottom_right))
 
+    def initialize_state(self) -> OthelloState:
+        """
+        Initialize a :obj:'OthelloState' object with correct environment parameters.
+
+        :returns:
+            Created initial state object.
+        """
+        if self.board_size % 2 == 1:
+            raise ValueError(
+                f"cannot center pieces with odd board_size={self.board_size}, please "
+                "initialize state manually"
+            )
+
+        board = np.array([
+            [[0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,1,0,0,0],
+            [0,0,0,1,1,0,0,0],
+            [0,0,0,0,1,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0]],
+            [[0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,1,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0]],
+        ])
+
+        legal_actions = np.array([
+            [[0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,1,0,0,0,0],
+            [0,0,1,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0]],
+            [[0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,1,0,1,0,0],
+            [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0]],
+        ])
+
+        initial_state = OthelloState(
+            board = board,
+            legal_actions = legal_actions,
+            done = False,
+            reward = np.zeros((2,))
+        )
+
+        return initial_state
+
+        
 
 
 
