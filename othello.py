@@ -1,6 +1,5 @@
 """
 Othello(Reversi) Environment
-
 Coordinates are specified in the form of ''(r, c)'', where ''(0, 0)'' is the top left corner.
 All coordinates and directions are absolute and does not change between agents.
 
@@ -11,10 +10,13 @@ Directions
     - Left: '-c'
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 import sys
 import numpy as np
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict
 from numpy.typing import ArrayLike, NDArray
 
 if sys.version_info < (3, 10):
@@ -64,7 +66,7 @@ class OthelloState(BaseState):
     Boolean value indicating wheter the game is done.
     """
 
-    reward: NDArray[np.int_]
+    reward: NDArray[np.int_] = np.array([0, 0])
     """
     Array of shape ''(2,)'',
     where each value indicates the reward of each agent.
@@ -72,7 +74,7 @@ class OthelloState(BaseState):
     values
         - Win : 1
         - Lose : -1
-        - Draw or not done yet : 0 
+        - Draw or not done yet : 0
     """
 
     def __str__(self) -> str:
@@ -81,46 +83,46 @@ class OthelloState(BaseState):
         Uses unicode box drawing characters.
         """
 
-        table_top = "¦£¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¨¦¡¦¡¦¡¦¤"
-        vertical_wall = "¦¢"
-        horizontal_wall = "¦¡¦¡¦¡"
-        left_intersection = "¦§"
-        middle_intersection = "¦«"
-        right_intersection = "¦©"
-        left_intersection_bottom = "¦¦"
-        middle_intersection_bottom = "¦ª"
-        right_intersection_bottom = "¦¥"
+        table_top = "â”Œâ”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”¬â”€â”€â”€â”"
+        vertical_wall = "â”‚"
+        horizontal_wall = "â”€â”€â”€"
+        left_intersection = "â”œ"
+        middle_intersection = "â”¼"
+        right_intersection = "â”¤"
+        left_intersection_bottom = "â””"
+        middle_intersection_bottom = "â”´"
+        right_intersection_bottom = "â”˜"
+
         result = table_top + "\n"
 
-        for y in range(8):
-            board_line = self.board[:, :, y]
+        for r in range(8):
+            board_line = self.board[:, r, :]
             result += vertical_wall
-            for x in range(8):
-                board_cell = board_line[:, x]
+            for c in range(8):
+                board_cell = board_line[:, c]
                 if board_cell[0]:
-                    result += " 0 "
+                    result += " X "
                 elif board_cell[1]:
-                    result += " 1 "
+                    result += " O "
                 else:
                     result += "   "
-                if x == 7:
+                if c == 7:
                     result += vertical_wall
                     result += "\n"
                 else:
                     result += " "
-            result += left_intersection_bottom if y == 7 else left_intersection
-            for x in range(8):
-                board_cell = board_line[:, x]
-                if y == 7:
+            result += left_intersection_bottom if r == 7 else left_intersection
+            for c in range(8):
+                if r == 7:
                     result += horizontal_wall
                     result += (
-                        right_intersection_bottom if y == 7
-                        else right_intersection
+                        right_intersection_bottom if c == 7
+                        else middle_intersection_bottom
                     )
                 else:
                     result += "   "
                     result += (
-                        middle_intersection_bottom if y == 8
+                        right_intersection if c == 7
                         else middle_intersection
                     )
 
@@ -128,29 +130,80 @@ class OthelloState(BaseState):
 
         return result
 
-    def perspective(self, agent_id: int) -> NDArray[np.int_]:
+    def perspective(self, agent_id: int) -> OthelloState:
         """
-        Return board observed by the agent whose ID is agent_id.
+        Return state observed by the agent whose ID is agent_id.
 
         :arg agent_id:
             The ID of agent to use as base.
 
         :returns:
-            The board's channel 0 will contain stones of ''agent_id'',
+            The ''board'' channel 0 will contain stones of ''agent_id'',
             and channel 1 will contain stones of opponent.
+            The ''legal_actions'' channel 0 will contain legal actions of ''agent_id'',
+            and channel 1 will contain legal actions of opponent.
+            ''done'' has no difference.
+            ''reward'' will be reversed.
             Considering that every game starts with 4 stones of fixed position,
-            it returns flipped ''board'' array if ''agent_id'' is 1.
+            it returns flipped ''board'' array if ''agent_id'' is 1, and the same goes for ''legal_actions'' array.
         """
 
         if agent_id == 0:
             return self.board
         
-        rotated = np.stack(
+        reverse_board = np.stack(
             np.fliplr(self.board[1]),
             np.fliplr(self.board[0])
         )
+        reverse_legal_actions = np.stack(
+            np.fliplr(self.legal_actions[1]),
+            np.fliplr(self.legal_actions[0])
+        )
+        reverse_reward = np.fliplr(self.reward)
 
-        return rotated
+        reverse_state = OthelloState(
+            board = reverse_board,
+            legal_actions = reverse_legal_actions,
+            done = self.done,
+            reward = reverse_reward
+        )
+        
+        return reverse_state
+
+    def need_jump(self, agent_id: int) -> bool:
+        """
+        Return whether the agent has no legal action.
+        """
+        return np.count_nonzero(self.legal_actions[agent_id]) == 0
+
+    def to_dict(self) -> Dict:
+        """
+        Serialize state object to dict.
+        :returns:
+            A serialized dict.
+        """
+        return {
+            "board": self.board.tolist(),
+            "legal_actions": self.legal_actions.tolist(),
+            "done": self.done,
+            "reward": self.reward.tolist(),
+        }
+
+    @staticmethod
+    def from_dict(serialized) -> OthelloState:
+        """
+        Deserialize from serialized dict.
+        :arg serialized:
+            A serialized dict.
+        :returns:
+            Deserialized ``PuoriborState`` object.
+        """
+        return OthelloState(
+            board=np.array(serialized["board"]),
+            legal_actions=np.array(serialized["legal_actions"]),
+            done=serialized["done"],
+            reward=np.array(serialized["reward"]),
+        )
 
 class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
     env_id = ("othello", 0) # type: ignore
@@ -243,13 +296,14 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
                     break
                 else:
                     break
+        board[agent_id][r][c] = 1
 
         legal_actions = np.zeros((2, self.board_size, self.board_size), dtype=np.int_)
         
         for r in range(self.board_size):
             for c in range(self.board_size):
 
-                if state.board[0][r][c] == 0 and state.board[1][r][c] == 0:
+                if board[0][r][c] == 0 and board[1][r][c] == 0:
 
                     for agent_id in range(2):
 
@@ -265,9 +319,9 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
                                 temp_c += dir[1]
                                 if not self._check_in_range(np.array([temp_r, temp_c])):
                                     break
-                                if state.board[1-agent_id][temp_r][temp_c] == 1:
+                                if board[1-agent_id][temp_r][temp_c] == 1:
                                     something_to_flip = True
-                                elif state.board[agent_id][temp_r][temp_c] == 1:
+                                elif board[agent_id][temp_r][temp_c] == 1:
                                     if something_to_flip:
                                         flipped = True
                                     break
@@ -281,7 +335,7 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
         
         done = False
         reward = np.zeros((2,))
-        if sum(legal_actions == 1) == 0:
+        if np.count_nonzero(legal_actions) == 0:
             done = True
             reward = self._check_wins(board)
         
@@ -296,8 +350,8 @@ class OthelloEnv(BaseEnv[OthelloState, OthelloAction]):
         return next_state
 
     def _check_wins(self, board: NDArray[np.int_]) -> NDArray[np.int_]:
-        agent0_cnt = sum(board[0] == 1)
-        agent1_cnt = sum(board[1] == 1)
+        agent0_cnt = np.count_nonzero(board[0])
+        agent1_cnt = np.count_nonzero(board[1])
         
         if agent0_cnt > agent1_cnt: return np.array([1, -1])
         elif agent0_cnt < agent1_cnt: return np.array([-1, 1])
