@@ -13,7 +13,7 @@ import numpy as np
 from colorama import Fore, Style
 
 from fights.base import BaseAgent
-import fastest_othello
+import complete_othello
 
 class RandomAgent(BaseAgent):
     env_id = ("othello", 0)  # type: ignore
@@ -22,16 +22,16 @@ class RandomAgent(BaseAgent):
         self.agent_id = agent_id  # type: ignore
         self._rng = np.random.default_rng(seed)
 
-    def _get_all_actions(self, state: fastest_othello.OthelloState):
+    def _get_all_actions(self, state: complete_othello.OthelloState):
         actions = []
-        for coordinate_x in range(fastest_othello.OthelloEnv.board_size):
-            for coordinate_y in range(fastest_othello.OthelloEnv.board_size):
+        for coordinate_x in range(complete_othello.OthelloEnv.board_size):
+            for coordinate_y in range(complete_othello.OthelloEnv.board_size):
                 action = [coordinate_x, coordinate_y]
                 if state.legal_actions[self.agent_id][coordinate_x][coordinate_y]:
                     actions.append(action)
         return actions
 
-    def __call__(self, state: fastest_othello.OthelloState) -> fastest_othello.OthelloAction:
+    def __call__(self, state: complete_othello.OthelloState) -> complete_othello.OthelloAction:
         actions = self._get_all_actions(state)
         return self._rng.choice(actions)
 
@@ -49,10 +49,10 @@ def colorize_walls(s: str) -> str:
     )
 
 def run():
-    assert fastest_othello.OthelloEnv.env_id == RandomAgent.env_id
+    assert complete_othello.OthelloEnv.env_id == RandomAgent.env_id
     colorama.init()
 
-    state = fastest_othello.OthelloEnv().initialize_state()
+    state = complete_othello.OthelloEnv().initialize_state()
     agents = [RandomAgent(1), RandomAgent(0)]
 
     print("\x1b[2J")
@@ -68,7 +68,7 @@ def run():
             if state.need_jump(agent.agent_id): continue
 
             action = agent(state)
-            state = fastest_othello.OthelloEnv().step(state, agent.agent_id, action)
+            state = complete_othello.OthelloEnv().step(state, agent.agent_id, action)
 
             print("\x1b[1;1H")
             print(fallback_to_ascii(colorize_walls(str(state))))
