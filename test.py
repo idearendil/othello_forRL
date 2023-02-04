@@ -42,12 +42,6 @@ def fallback_to_ascii(s: str) -> str:
         s = re.sub("[┌┬┐├┼┤└┴┘╋]", "+", re.sub("[─━]", "-", re.sub("[│┃]", "|", s)))
     return s
 
-
-def colorize_walls(s: str) -> str:
-    return s.replace("━", Fore.BLUE + "━" + Style.RESET_ALL).replace(
-        "┃", Fore.RED + "┃" + Style.RESET_ALL
-    )
-
 def run():
     assert complete_othello.OthelloEnv.env_id == RandomAgent.env_id
     colorama.init()
@@ -61,7 +55,7 @@ def run():
     while not state.done:
 
         print("\x1b[1;1H")
-        print(fallback_to_ascii(colorize_walls(str(state))))
+        print(fallback_to_ascii(str(state)))
 
         for agent in agents:
 
@@ -69,7 +63,7 @@ def run():
             state = complete_othello.OthelloEnv().step(state, agent.agent_id, action)
 
             print("\x1b[1;1H")
-            print(fallback_to_ascii(colorize_walls(str(state))))
+            print(fallback_to_ascii(str(state)))
 
             a = input()
 
