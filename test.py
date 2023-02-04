@@ -53,7 +53,7 @@ def run():
     colorama.init()
 
     state = complete_othello.OthelloEnv().initialize_state()
-    agents = [RandomAgent(1), RandomAgent(0)]
+    agents = [RandomAgent(0), RandomAgent(1)]
 
     print("\x1b[2J")
 
@@ -64,8 +64,6 @@ def run():
         print(fallback_to_ascii(colorize_walls(str(state))))
 
         for agent in agents:
-            
-            if state.need_jump(agent.agent_id): continue
 
             action = agent(state)
             state = complete_othello.OthelloEnv().step(state, agent.agent_id, action)

@@ -192,8 +192,6 @@ def run_complete():
         while not state.done:
 
             for agent in agents:
-                
-                if state.need_jump(agent.agent_id): continue
 
                 action = agent(state)
                 state = complete_othello.OthelloEnv().step(state, agent.agent_id, action)
